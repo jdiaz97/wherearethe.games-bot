@@ -8,3 +8,5 @@ dotenv = "0.15.0"
 dotenv_codegen = "0.15.0"
 poise = "0.6.1"
 tokio = { version = "1.42.0", features = ["rt-multi-thread"]}
+csv = "1.1"
+polars = { version = "0.33.2", features = ["csv"] }
