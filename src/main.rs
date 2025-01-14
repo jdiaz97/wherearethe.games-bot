@@ -29,6 +29,23 @@ fn get_country_df(country: String) -> DataFrame {
     return df
 }
 
+fn parse_date(date_str: &str) -> NaiveDate {
+    NaiveDate::parse_from_str(date_str, "%d %b, %Y").unwrap_or_else(|_| {
+        NaiveDate::from_ymd_opt(1980, 1, 1).unwrap()  // Placeholder date (for example: January 1st, 2000)
+    })
+}
+
+fn series_to_naive(data: &Series) -> Vec<NaiveDate> {
+    let mut vec_dates: Vec<NaiveDate> = Vec::new();
+    for i in 0..data.len(){
+        let date_str = data.get(i).unwrap().to_string();
+        let parsed_date = parse_date(&date_str);
+        vec_dates.push(parsed_date);
+    }
+    return vec_dates
+
+}
+
 /// Get the 5 next releases of a given country
 #[poise::command(slash_command, prefix_command)]
 async fn next5(ctx: Context<'_>, #[description = "Next 5 releases of the country:"] country: String) -> Result<(), Error>  {
