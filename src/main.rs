@@ -66,9 +66,9 @@ fn df_to_markdown(df: &DataFrame, country: &str) -> String {
         let link = df.column("Steam_Link").unwrap().get(row).unwrap();
 
         // Discord-friendly formatting with emojis and clear structure
-        result.push_str(&format!("🎯 **{}**\n", name));
+        result.push_str(&format!("🎯 **{}**\n", name.to_string().trim_matches('"')));
         result.push_str(&format!("📅 Released: {}\n", date));
-        result.push_str(&format!("🔗 {}\n", link));
+        result.push_str(&format!("🔗 <{}>\n", link.to_string().trim_matches('"')));
         result.push_str("\n"); // Extra spacing between games
     }
 
@@ -83,9 +83,10 @@ async fn latest5(
 ) -> Result<(), Error> {
     match get_country_df(&country) {
         Ok(mut df) => {
-            let b = series_to_naive(df.column("Release_Date")?);
-            let df = df.with_column(Series::new("Release_Date", b))?;
-
+            let df = df.with_column(Series::new(
+                "Release_Date",
+                series_to_naive(df.column("Release_Date")?),
+            ))?;
             let df = df.sort(["Release_Date"], true, false)?;
             let md = df_to_markdown(&df, &country);
             ctx.say(md).await?;
