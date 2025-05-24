@@ -3,7 +3,7 @@
 extern crate dotenv_codegen;
 extern crate dotenv;
 
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
 use poise::serenity_prelude as serenity;
 
 struct Data {} // User data, which is stored and accessible in all command invocations
@@ -54,13 +54,13 @@ fn series_to_naive(data: &Series) -> Vec<NaiveDate> {
         .collect()
 }
 
-fn df_to_markdown(df: &DataFrame, country: &str) -> String {
+fn df_to_markdown(df: &DataFrame, country: &str, n: usize) -> String {
     let mut result = String::new();
 
     // Discord-friendly header
     result.push_str(&format!("## 🎮 Latest Games from: {}\n\n", country));
 
-    for row in 0..5.min(df.height()) {
+    for row in 0..n.min(df.height()) {
         let name = df.column("Name").unwrap().get(row).unwrap();
         let date = df.column("Release_Date").unwrap().get(row).unwrap();
         let link = df.column("Steam_Link").unwrap().get(row).unwrap();
@@ -75,7 +75,27 @@ fn df_to_markdown(df: &DataFrame, country: &str) -> String {
     result
 }
 
-/// Get the next releases of a given country
+fn sort_df(df: &mut DataFrame) -> DataFrame {
+    // and delete unnanounced
+
+    let newdf = df
+        .with_column(Series::new(
+            "Release_Date",
+            series_to_naive(df.column("Release_Date").unwrap()),
+        ))
+        .unwrap();
+    let df = newdf.sort(["Release_Date"], true, false).unwrap();
+
+    let df = &df
+        .lazy()
+        .filter(col("Release_Date").neq(lit(NaiveDate::from_ymd_opt(1980, 1, 1).unwrap())))
+        .collect()
+        .unwrap();
+
+    return df.clone();
+}
+
+/// Latest 5 game releases of a given country
 #[poise::command(slash_command, prefix_command)]
 async fn latest5(
     ctx: Context<'_>,
@@ -83,13 +103,22 @@ async fn latest5(
 ) -> Result<(), Error> {
     match get_country_df(&country) {
         Ok(mut df) => {
-            let df = df.with_column(Series::new(
-                "Release_Date",
-                series_to_naive(df.column("Release_Date")?),
-            ))?;
-            let df = df.sort(["Release_Date"], true, false)?;
-            let md = df_to_markdown(&df, &country);
-            ctx.say(md).await?;
+            if df.height() == 0 {
+                ctx.say("Sorry, we don't have enough data :(").await?;
+            } else {
+                let df = sort_df(&mut df);
+
+                let now = Utc::now().naive_utc().date(); // UTC version
+
+                let df = &df
+                    .lazy()
+                    .filter(col("Release_Date").lt(lit(now)))
+                    .collect()
+                    .unwrap();
+
+                let md = df_to_markdown(&df, &country, 5);
+                ctx.say(md).await?;
+            }
         }
         Err(_) => {
             ctx.say("Error, country not found").await?;
@@ -99,10 +128,64 @@ async fn latest5(
     Ok(())
 }
 
-/// say something
+/// Latest 3 game releases of a given country
+#[poise::command(slash_command, prefix_command)]
+async fn latest3(
+    ctx: Context<'_>,
+    #[description = "Latest 3 releases of the country:"] country: String,
+) -> Result<(), Error> {
+    match get_country_df(&country) {
+        Ok(mut df) => {
+            if df.height() == 0 {
+                ctx.say("Sorry, we didn't find any games :(").await?;
+            } else {
+                let df = sort_df(&mut df);
+
+                let now = Utc::now().naive_utc().date(); // UTC version
+
+                let df = &df
+                    .lazy()
+                    .filter(col("Release_Date").lt(lit(now)))
+                    .collect()
+                    .unwrap();
+
+                let md = df_to_markdown(&df, &country, 3);
+                ctx.say(md).await?;
+            }
+        }
+        Err(_) => {
+            ctx.say("Error, country not found").await?;
+        }
+    }
+
+    Ok(())
+}
+
 #[poise::command(slash_command, prefix_command)]
 async fn ping(ctx: Context<'_>) -> Result<(), Error> {
     let response = format!("# MODS WEKOS");
+    ctx.say(response).await?;
+    Ok(())
+}
+
+/// The next 5 game releases of a given country
+#[poise::command(slash_command, prefix_command)]
+async fn next3(
+    ctx: Context<'_>,
+    #[description = "Next 3 releases of the country:"] country: String,
+) -> Result<(), Error> {
+    let response = format!("# MODS WEKOS, NOT IMPLEMENTED YET");
+    ctx.say(response).await?;
+    Ok(())
+}
+
+/// The next 5 game releases of a given country
+#[poise::command(slash_command, prefix_command)]
+async fn next5(
+    ctx: Context<'_>,
+    #[description = "Next 5 releases of the country:"] country: String,
+) -> Result<(), Error> {
+    let response = format!("# MODS WEKOS, NOT IMPLEMENTED YET");
     ctx.say(response).await?;
     Ok(())
 }
@@ -114,7 +197,7 @@ async fn main() {
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![latest5(), ping()],
+            commands: vec![latest5(), latest3(), next5(),next3(),ping()],
             ..Default::default()
         })
         .setup(|ctx, _ready, framework| {
